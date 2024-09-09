@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SafeShutdown"
         mc:Ignorable="d"
-        Title="SafeShutdown" Height="650" Width="800" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen">
+        Title="SafeShutdown" Height="650" Width="800" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen" MinWidth="800" MaxWidth="800" MinHeight="650" MaxHeight="NaN">
     <Window.Resources>
         <local:BoolToOnlineStatusConverter x:Key="BoolToOnlineStatusConverter"/>
     </Window.Resources>
