@@ -17,86 +17,39 @@ namespace SafeShutdown
             set => obj = value;
         }
 
-        public void Debug(string msg)
-        {
-            logger.Debug(msg);
-            MainWindow.Instance().WriteLogBox(msg);
-        }
-
-        public void Debug(string msg, Exception err)
-        {
-            logger.Debug(err, msg);
-            MainWindow.Instance().WriteLogBox(msg);
-        }
-
         public void Info(string msg)
         {
-            logger.Info(msg);
+            logger.Info("[Info]" + msg);
             MainWindow.Instance().WriteLogBox(msg);
         }
 
         public void Info(string msg, Exception err)
         {
-            logger.Info(err, msg);
+            logger.Info(err, "[Info]" + msg);
             MainWindow.Instance().WriteLogBox(msg);
         }
         public void Warn(string msg)
         {
-            logger.Warn(msg);
+            logger.Info("[Warn]" + msg);
             MainWindow.Instance().WriteLogBox(msg);
         }
 
         public void Warn(string msg, Exception err)
         {
-            logger.Warn(err, msg);
-            MainWindow.Instance().WriteLogBox(msg);
-        }
-
-        public void Trace(string msg)
-        {
-            logger.Trace(msg);
-            MainWindow.Instance().WriteLogBox(msg);
-        }
-
-        public void Trace(string msg, Exception err)
-        {
-            logger.Trace(err, msg);
+            logger.Info(err, "[Warn]" + msg);
             MainWindow.Instance().WriteLogBox(msg);
         }
 
         public void Error(string msg)
         {
-            logger.Error(msg);
+            logger.Info("[Error]" + msg);
             MainWindow.Instance().WriteLogBox(msg);
         }
 
         public void Error(string msg, Exception err)
         {
-            logger.Error(err, msg);
+            logger.Info(err, "[Error]" + msg);
             MainWindow.Instance().WriteLogBox(msg);
         }
-
-        public void Fatal(string msg)
-        {
-            logger.Fatal(msg);
-            MainWindow.Instance().WriteLogBox(msg);
-        }
-
-        public void Fatal(string msg, Exception err)
-        {
-            logger.Fatal(err, msg);
-            MainWindow.Instance().WriteLogBox(msg);
-        }
-
-
-
-
-
-
-
-
-
-
-
     }
 }
