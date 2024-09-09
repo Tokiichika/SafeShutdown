@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>img\favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="favicon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="img\favicon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="img\favicon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="NLog" Version="5.3.3" />
+    <PackageReference Include="SSH.NET" Version="2024.1.0" />
+  </ItemGroup>
+
+</Project>
