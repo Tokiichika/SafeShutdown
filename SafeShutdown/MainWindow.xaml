@@ -1,0 +1,118 @@
+﻿<Window x:Class="SafeShutdown.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:SafeShutdown"
+        mc:Ignorable="d"
+        Title="SafeShutdown" Height="650" Width="800" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <local:BoolToOnlineStatusConverter x:Key="BoolToOnlineStatusConverter"/>
+    </Window.Resources>
+
+    <Grid>
+        <StackPanel>
+            <Grid Height="100">
+                <Grid.RowDefinitions>
+                    <RowDefinition/>
+                    <RowDefinition/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Center" Text="市电状态:" FontSize="40" Foreground="Black"/>
+                <TextBlock x:Name="power_sta" Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Text="有电" FontSize="40" Foreground="Green"/>
+                <Button Grid.Row="0" Grid.Column="2" x:Name="manual_shutdown" Click="Manual_Shutdown_Click">
+                    <Button.Content>
+                        <TextBlock Text="关闭所有主机" FontSize="35" Foreground="Red"></TextBlock>
+                    </Button.Content>
+                </Button>
+                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Center" Text="监控IP:" FontSize="40" Foreground="Black"/>
+                <TextBox x:Name="MonIPBox" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Text="{Binding MonIP, UpdateSourceTrigger=PropertyChanged}" FontSize="35"/>
+                <Button Grid.Row="1" Grid.Column="2" x:Name="mon_start" Click="Start_Click">
+                    <Button.Content>
+                        <TextBlock x:Name="start_btn_text" Text="开始监控" FontSize="35" Foreground="Black"></TextBlock>
+                    </Button.Content>
+                </Button>
+            </Grid>
+            <Grid Margin="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="IP" Margin="5,0,5,0" FontSize="25" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="用户名" Margin="5,0,5,0" FontSize="25" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="密码" Margin="5,0,5,0" FontSize="25" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="命令" Margin="5,0,5,0" FontSize="25" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="0" Grid.Column="4" Text="延时" Margin="5,0,5,0" FontSize="25" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="0" Grid.Column="5" Text="在线状态" Margin="5,0,5,0" FontSize="25" HorizontalAlignment="Center"/>
+            </Grid>
+                
+
+            <ListBox x:Name="ServerListBox" HorizontalAlignment="Stretch" VerticalAlignment="Top" Height="300">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 可编辑的 TextBox -->
+                            <TextBox Text="{Binding IP, UpdateSourceTrigger=PropertyChanged}" Grid.Column="0" Margin="5,0,5,0" FontSize="25"/>
+                            <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" Margin="5,0,5,0" FontSize="25"/>
+                            <TextBox Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}" Grid.Column="2" Margin="5,0,5,0" FontSize="25"/>
+                            <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" Grid.Column="3" Margin="5,0,5,0" FontSize="25"/>
+                            <TextBox Text="{Binding Delay, UpdateSourceTrigger=PropertyChanged}" Grid.Column="4" Margin="5,0,5,0" FontSize="25"/>
+                            <TextBlock Text="{Binding IsOnline,Mode=TwoWay,Converter={StaticResource BoolToOnlineStatusConverter}}" Grid.Column="5" Margin="35,0,5,0" FontSize="25"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                <Button Click="AddItem_Click" Width="80" Margin="5">
+                    <Button.Content>
+                        <TextBlock Text="添加" FontSize="20"/>
+                    </Button.Content>
+                </Button>
+                <Button Click="DeleteItem_Click" Width="80" Margin="5">
+                    <Button.Content>
+                        <TextBlock Text="删除" FontSize="20"/>
+                    </Button.Content>
+                </Button>
+                <Button Click="UP_Item_Click" Width="35" Margin="5">
+                    <Button.Content>
+                        <TextBlock Text="↑" FontSize="20"/>
+                    </Button.Content>
+                </Button>
+                <Button Click="Down_Item_Click" Width="35" Margin="5">
+                    <Button.Content>
+                        <TextBlock Text="↓" FontSize="20"/>
+                    </Button.Content>
+                </Button>
+                <Button Click="SaveChanges_Click" Width="80" Margin="5">
+                    <Button.Content>
+                        <TextBlock Text="保存" FontSize="20"/>
+                    </Button.Content>
+                </Button>
+                <Button Click="sshTest_Click" Width="130" Margin="5">
+                    <Button.Content>
+                        <TextBlock Text="测试SSH连接" FontSize="20"/>
+                    </Button.Content>
+                </Button>
+            </StackPanel>
+            <TextBox x:Name="logbox" Height="150" IsReadOnly="True" Background="Black" Text="[2024:09:06-19:42:30]这是一条日志。" Foreground="Yellow" FontSize="15" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap"/>
+        </StackPanel>
+    </Grid>
+</Window>
