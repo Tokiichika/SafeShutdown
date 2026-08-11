@@ -1,194 +1,227 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Drawing;
-using System.Linq;
 using System.Net.NetworkInformation;
-using System.Printing;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Threading;
 
-namespace SafeShutdown
+namespace SafeShutdown;
+
+public enum PowerState
 {
-    public class ServerMonitor
+    Unknown,
+    Online,
+    SuspectedOutage,
+    Offline
+}
+
+public sealed record PowerStateChangedEventArgs(
+    PowerState State,
+    int ConsecutiveFailures,
+    int FailureThreshold,
+    DateTime CheckedAt);
+
+public sealed class ServerMonitor : IAsyncDisposable
+{
+    private readonly object _stateLock = new();
+    private CancellationTokenSource? _cancellation;
+    private Task? _monitorTask;
+
+    public bool IsRunning { get; private set; }
+
+    public event Action<PowerStateChangedEventArgs>? PowerStateChanged;
+    public event Action<ServerInfo, bool>? ServerStatusChanged;
+    public event Action? OutageDetected;
+
+    public void Start(AppConfig config, IReadOnlyCollection<ServerInfo> servers)
     {
-        public static int failping = 0;
-        public static bool DoPing(string ipAddress)
+        lock (_stateLock)
+        {
+            if (IsRunning)
+            {
+                return;
+            }
+
+            if (_monitorTask?.IsCompleted == true)
+            {
+                _cancellation?.Dispose();
+                _cancellation = null;
+                _monitorTask = null;
+            }
+
+            config.Normalize();
+            _cancellation = new CancellationTokenSource();
+            IsRunning = true;
+            _monitorTask = RunAsync(config, servers, _cancellation.Token);
+        }
+
+        LogHelper.Info("监控已启动。");
+    }
+
+    public async Task StopAsync()
+    {
+        Task? task;
+        lock (_stateLock)
+        {
+            if (!IsRunning && _monitorTask is null)
+            {
+                return;
+            }
+
+            _cancellation?.Cancel();
+            task = _monitorTask;
+        }
+
+        if (task is not null)
         {
             try
             {
-                using (Ping ping = new Ping())
-                {
-                    PingReply reply = ping.Send(ipAddress, 1000); // 1000ms 超时
-                    if (reply.Status == IPStatus.Success)
-                    {
-                        return true;
-                    }
-                    else
-                    {
-                        LogHelper.WriteLog.Warn($"无法ping通主机{ipAddress}，状态： {reply.Status}");
-                        return false;
-                    }
-                }
+                await task.ConfigureAwait(false);
             }
-            catch (PingException ex)
+            catch (OperationCanceledException)
             {
-                // 处理 ping 异常（例如网络不可达）
-                LogHelper.WriteLog.Error($"{ex.Message}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                // 处理其他异常
-                LogHelper.WriteLog.Error($"{ex.Message}");
-                return false;
+                // 正常停止。
             }
         }
 
-        public static bool is_Online(string ip)
+        lock (_stateLock)
         {
-            int failping = 0;
-            if (!DoPing(ip))
+            _cancellation?.Dispose();
+            _cancellation = null;
+            _monitorTask = null;
+            IsRunning = false;
+        }
+
+        LogHelper.Info("监控已停止。");
+    }
+
+    public static async Task<bool> PingAsync(string host, int timeoutMilliseconds, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var ping = new Ping();
+            var reply = await ping.SendPingAsync(host.Trim(), timeoutMilliseconds)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return reply.Status == IPStatus.Success;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is PingException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private async Task RunAsync(AppConfig config, IReadOnlyCollection<ServerInfo> servers, CancellationToken token)
+    {
+        try
+        {
+            await Task.WhenAll(
+                MonitorPowerAsync(config, token),
+                MonitorServersAsync(config, servers, token)).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // 正常停止。
+        }
+        catch (Exception ex)
+        {
+            LogHelper.Error("监控任务意外退出。", ex);
+        }
+        finally
+        {
+            lock (_stateLock)
             {
-                failping++;
-                if (failping >= 3)
+                IsRunning = false;
+            }
+        }
+    }
+
+    private async Task MonitorPowerAsync(AppConfig config, CancellationToken token)
+    {
+        var consecutiveFailures = 0;
+
+        while (!token.IsCancellationRequested)
+        {
+            var isOnline = await PingAsync(config.MonIP, config.PingTimeoutMilliseconds, token)
+                .ConfigureAwait(false);
+
+            if (isOnline)
+            {
+                if (consecutiveFailures > 0)
                 {
-                    return false;
+                    LogHelper.Info($"监控目标 {config.MonIP} 已恢复可达。");
                 }
+
+                consecutiveFailures = 0;
+                PowerStateChanged?.Invoke(new PowerStateChangedEventArgs(
+                    PowerState.Online, 0, config.FailureThreshold, DateTime.Now));
             }
             else
             {
-                return true;
-            }
-            return false;
-        }
-        static List<Thread> ThreadList = new List<Thread>();
-        /// <summary>
-        /// 启动所有监控线程
-        /// </summary>
-        public static void Start()
-        {
-            if (MainWindow.Instance().is_start == true)
-                return;
-            MainWindow.Instance().is_start = true;
-            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                MainWindow.Instance().start_btn_text.Text = "停止监控";
-            }));
-            ThreadList.Clear();
-            //监控市电状态
-            Thread tpower = new Thread(() =>
-            {
-                LogHelper.WriteLog.Info("市电状态监控线程已启动！");
-                while (MainWindow.Instance().is_start)
+                consecutiveFailures++;
+                var state = consecutiveFailures >= config.FailureThreshold
+                    ? PowerState.Offline
+                    : PowerState.SuspectedOutage;
+
+                LogHelper.Warn($"监控目标 {config.MonIP} 无响应（{consecutiveFailures}/{config.FailureThreshold}）。");
+                PowerStateChanged?.Invoke(new PowerStateChangedEventArgs(
+                    state, consecutiveFailures, config.FailureThreshold, DateTime.Now));
+
+                if (state == PowerState.Offline)
                 {
-                    if (!is_Online(MainWindow.Instance().MonIP))
-                    {
-                        failping++;
-                        LogHelper.WriteLog.Warn($"ping监控IP {MainWindow.Instance().MonIP} 失败！重试次数:{failping}");
-                        if (failping >= 5)
-                        {
-                            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                            {
-                                MainWindow.Instance().power_sta.Text = "停电";
-                                MainWindow.Instance().power_sta.Foreground = new SolidColorBrush(Colors.Red);
-                            }));
-                            LogHelper.WriteLog.Warn("检测到市电断开，执行关机步骤……");
-                            cmdHelper.Shutdown_all_server();
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        failping = 0;
-                        System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            MainWindow.Instance().power_sta.Text = "有电";
-                            MainWindow.Instance().power_sta.Foreground = new SolidColorBrush(Colors.Green);
-                        }));
-                    }
-                    for (int i = 0; i < 600; i++)
-                    {
-                        Thread.Sleep(100);
-                        if (!MainWindow.Instance().is_start)
-                            break;
-                    }
+                    LogHelper.Warn("已达到连续失败阈值，判定市电中断并启动安全关机流程。");
+                    OutageDetected?.Invoke();
+                    _cancellation?.Cancel();
+                    return;
                 }
-                LogHelper.WriteLog.Info("市电状态监控线程已停止！");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(config.MonitorIntervalSeconds), token)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task MonitorServersAsync(
+        AppConfig config,
+        IReadOnlyCollection<ServerInfo> servers,
+        CancellationToken token)
+    {
+        var previousStates = new Dictionary<ServerInfo, bool>();
+
+        while (!token.IsCancellationRequested)
+        {
+            var snapshot = servers.Where(server => server.Enabled).ToArray();
+            var checks = snapshot.Select(async server =>
+            {
+                var online = await PingAsync(server.IP, config.PingTimeoutMilliseconds, token)
+                    .ConfigureAwait(false);
+                return (Server: server, Online: online);
             });
-            tpower.IsBackground = true;
-            ThreadList.Add(tpower);
-            //主机在线状态监测线程
-            Thread tserver = new Thread(() =>
-            {
-                LogHelper.WriteLog.Info("主机在线状态监控线程已启动！");
-                while (MainWindow.Instance().is_start)
-                {
-                    System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        int cnt = MainWindow.Instance().Servers.Count;
-                        for (int i = 0; i < cnt ;i++)
-                        {
-                            MainWindow.Instance().change_online_sta(i, DoPing(MainWindow.Instance().Servers[i].IP));
-                        }
-                        MainWindow.Instance().ServerListBox.ItemsSource = null;
-                        MainWindow.Instance().ServerListBox.ItemsSource = MainWindow.Instance().Servers;
-                    }));
-                    for(int i = 0;i<100;i++)
-                    {
-                        Thread.Sleep(100);
-                        if (!MainWindow.Instance().is_start)
-                            break;
-                    } 
-                }
-                LogHelper.WriteLog.Info("主机在线状态监控线程已停止！");
-            });
-            tserver.IsBackground = true;
-            ThreadList.Add(tserver);
 
-            foreach (var thread in ThreadList)
+            var results = await Task.WhenAll(checks).ConfigureAwait(false);
+            foreach (var result in results)
             {
-                if (thread != null)
+                if (!previousStates.TryGetValue(result.Server, out var previous) || previous != result.Online)
                 {
-                    thread.Start();
+                    var label = result.Online ? "在线" : "离线";
+                    LogHelper.Info($"主机 {result.Server.IP} 状态：{label}。");
+                    previousStates[result.Server] = result.Online;
                 }
+
+                ServerStatusChanged?.Invoke(result.Server, result.Online);
             }
+
+            await Task.Delay(TimeSpan.FromSeconds(config.MonitorIntervalSeconds), token)
+                .ConfigureAwait(false);
         }
-        /// <summary>
-        /// 停止所有监控线程
-        /// </summary>
-        public static void Stop() 
-        {
-            MainWindow.Instance().is_start = false;
-            if (ThreadList != null && ThreadList.Count > 0)
-            {
-                foreach (var thread in ThreadList)
-                {
-                    if (thread != null && thread.ThreadState == ThreadState.Running)
-                    {
-                        thread.Join();
-                    }
-                }
-            }
-            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                MainWindow.Instance().start_btn_text.Text = "开始监控";
-            }));
-            LogHelper.WriteLog.Info("所有监控线程已停止！");
-        }
-        //重启所有监控线程
-        public static void ReStart()
-        {
-            Stop();
-            Start();
-        }
+    }
 
-
-
-
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync().ConfigureAwait(false);
     }
 }
